@@ -1,0 +1,82 @@
+import classNames from "classnames";
+import { useState } from "preact/hooks";
+import { sendMessage } from "src/ts/helpers/communication/dom";
+import { getMessage } from "src/ts/helpers/i18n/getMessage";
+import type { PassProductInfo } from "src/ts/helpers/requests/services/passes";
+import type { RobloxSharedExperiencePass } from "src/ts/helpers/requests/services/roseal";
+import Button from "../../core/Button";
+import SharedPassModal from "./SharedPassModal";
+
+export type PassPurchaseButtonProps = {
+	disabled?: boolean;
+	displayIcon?: number;
+	passName?: string;
+	passProductId?: number;
+	passExpectedPrice?: number | null;
+	passExpectedSellerId?: number | null;
+	passExpectedSellerName?: string | null;
+	isOwned?: boolean;
+	productDetails?: PassProductInfo;
+	sharedDetails?: RobloxSharedExperiencePass;
+};
+
+export default function PassPurchaseButton({
+	disabled: _disabled,
+	displayIcon,
+	passName,
+	passProductId,
+	passExpectedPrice,
+	passExpectedSellerId,
+	passExpectedSellerName,
+	isOwned,
+	sharedDetails,
+}: PassPurchaseButtonProps) {
+	const [showSharedPassModal, setShowSharedPassModal] = useState(false);
+	const disabled = _disabled || !passExpectedPrice;
+
+	const robloxData = disabled
+		? {}
+		: {
+				"data-item-id": displayIcon,
+				"data-item-name": passName,
+				"data-product-id": passProductId,
+				"data-expected-price": passExpectedPrice,
+				"data-asset-type": "Game Pass",
+				"data-expected-seller-id": passExpectedSellerId,
+				"data-seller-name": passExpectedSellerName,
+				"data-expected-currency": 1,
+			};
+
+	const buyPass = (e?: MouseEvent) => {
+		if (!passProductId) return;
+
+		e?.stopPropagation();
+		sendMessage("experience.store.promptPurchase", passProductId);
+	};
+
+	return (
+		<Button
+			className={classNames("rbx-gear-passes-purchase", {
+				PurchaseButton: !disabled,
+				"shared-details-button": sharedDetails,
+			})}
+			type="buy"
+			width="full"
+			disabled={disabled}
+			onClick={sharedDetails ? () => setShowSharedPassModal(true) : buyPass}
+			{...robloxData}
+		>
+			{sharedDetails && passExpectedPrice !== null && passExpectedPrice !== undefined && (
+				<SharedPassModal
+					show={showSharedPassModal}
+					isOwned={isOwned}
+					sharedDetails={sharedDetails}
+					priceInRobux={passExpectedPrice}
+					setShow={setShowSharedPassModal}
+					buyPass={buyPass}
+				/>
+			)}
+			{getMessage(`experience.passes.item.${sharedDetails ? "details" : "buy"}`)}
+		</Button>
+	);
+}

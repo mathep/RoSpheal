@@ -1,0 +1,96 @@
+import classNames from "classnames";
+import { getMessage } from "src/ts/helpers/i18n/getMessage";
+import type { RobloxSharedExperiencePass } from "src/ts/helpers/requests/services/roseal";
+import { getPassDetailsLink } from "src/ts/utils/links";
+import RobuxView from "../../core/RobuxView";
+import Thumbnail from "../../core/Thumbnail";
+import PassPurchaseButton from "./PassPurchaseButton";
+
+export type PassProps = {
+	name: string;
+	passId: number;
+	productId?: number | null;
+	sellerId?: number | null;
+	sellerName?: string | null;
+	isOwned?: boolean;
+	sharedDetails?: RobloxSharedExperiencePass;
+	priceInRobux?: number | null;
+	displayIcon?: number | null;
+};
+
+export default function Pass({
+	name,
+	passId,
+	productId,
+	sellerId,
+	sellerName,
+	priceInRobux,
+	isOwned,
+	sharedDetails,
+	displayIcon,
+}: PassProps) {
+	return (
+		<div
+			className={classNames("store-card", {
+				"is-shared": sharedDetails,
+				"is-owned": isOwned,
+			})}
+		>
+			<a
+				className="gear-passes-asset store-card-link"
+				href={getPassDetailsLink(passId, name)}
+			>
+				<Thumbnail
+					containerClassName="store-card-image"
+					request={
+						sharedDetails?.iconData ?? {
+							targetId: passId,
+							type: "GamePass",
+							size: "150x150",
+						}
+					}
+				/>
+			</a>
+			<div className="store-card-caption">
+				<div
+					className="text-overflow store-card-name"
+					title={sharedDetails?.displayName ?? name}
+				>
+					{sharedDetails?.displayName ?? name}
+				</div>
+				<div
+					className={classNames("store-card-price", {
+						offsale: !priceInRobux,
+					})}
+				>
+					{!sharedDetails || !isOwned ? (
+						<RobuxView priceInRobux={priceInRobux} useGrouping={false} />
+					) : (
+						<span className="item-owned-text text">
+							{getMessage("experience.passes.item.owned")}
+						</span>
+					)}
+				</div>
+				<div className="store-card-footer">
+					{isOwned && !sharedDetails && (
+						<h5 className="item-owned-text">
+							{getMessage("experience.passes.item.owned")}
+						</h5>
+					)}
+					{(!isOwned || sharedDetails) && (
+						<PassPurchaseButton
+							passName={name}
+							passProductId={productId ?? undefined}
+							passExpectedPrice={priceInRobux}
+							passExpectedSellerId={sellerId}
+							passExpectedSellerName={sellerName}
+							displayIcon={displayIcon ?? undefined}
+							isOwned={isOwned}
+							sharedDetails={sharedDetails}
+						/>
+					)}
+				</div>
+			</div>
+		</div>
+	);
+}

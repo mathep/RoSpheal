@@ -1,0 +1,154 @@
+import { RESTError } from "@roseal/http-client";
+import { useCallback, useEffect, useState } from "preact/hooks";
+import { SEAL_EMOJI_COMPONENT } from "src/ts/constants/preact";
+import { getMessage } from "src/ts/helpers/i18n/getMessage";
+import {
+	type CreateUserLookResponse,
+	createUserLook,
+	type LookPreview,
+} from "src/ts/helpers/requests/services/marketplace";
+import type { ReactAvatarEditorPageAvatar } from "src/ts/pages/inject/www/my/avatar";
+import { getAvatarLookLink } from "src/ts/utils/links";
+import SimpleModal from "../../core/modal/SimpleModal";
+import TextInput from "../../core/TextInput";
+
+export type PostAvatarModalProps = {
+	show: boolean;
+	avatar: ReactAvatarEditorPageAvatar;
+	lookPreview?: LookPreview;
+	setShow: (value: boolean) => void;
+};
+
+export default function PostAvatarModal({
+	show,
+	avatar,
+	lookPreview,
+	setShow,
+}: PostAvatarModalProps) {
+	const [name, setName] = useState("");
+	const [description, setDescription] = useState("");
+	const [loading, setLoading] = useState(false);
+	const [createdLook, setCreatedLook] = useState<CreateUserLookResponse>();
+	const [errorMessage, setErrorMessage] = useState<string>();
+
+	useEffect(() => {
+		if (show) {
+			setName("");
+			setDescription("");
+			setCreatedLook(undefined);
+			setErrorMessage(undefined);
+		}
+	}, [show]);
+
+	const onClickAction = useCallback(() => {
+		if (createdLook) {
+			window.open(getAvatarLookLink(createdLook.id, name), "_blank");
+			setShow(false);
+			return;
+		}
+
+		if (!name) return;
+
+		setErrorMessage(undefined);
+		setLoading(true);
+
+		const bodyColors = { ...avatar.bodyColors };
+		for (const key in bodyColors) {
+			bodyColors[key as keyof typeof bodyColors] = bodyColors[
+				key as keyof typeof bodyColors
+			].replace("#", "");
+		}
+
+		const assetIdToBundleId = new Map<number, string>();
+		if (lookPreview?.items) {
+			for (const item of lookPreview.items) {
+				if (item.itemType === "Bundle" && item.assetsInBundle) {
+					for (const item2 of item.assetsInBundle) {
+						assetIdToBundleId.set(item2.id, item.id.toString());
+					}
+				}
+			}
+		}
+
+		createUserLook({
+			name,
+			description,
+			assets: avatar.assets.map((asset) => ({
+				id: asset.id,
+				meta: asset.meta,
+				bundleId: assetIdToBundleId.get(asset.id),
+			})),
+			avatarProperties: {
+				playerAvatarType: avatar.avatarType,
+				bodyColor3s: bodyColors,
+				scale: {
+					bodyType: avatar.scales.bodyType.value / 100,
+					// sometimes "depth" is undefined...
+					depth: (avatar.scales.depth?.value ?? 100) / 100,
+					head: avatar.scales.head.value / 100,
+					height: avatar.scales.height.value / 100,
+					proportion: avatar.scales.proportion.value / 100,
+					width: avatar.scales.width.value / 100,
+				},
+			},
+		})
+			.then(setCreatedLook)
+			.catch((err) => {
+				setErrorMessage(
+					(err instanceof RESTError &&
+						(err.errors?.[0].userFacingMessage || err.errors?.[0].message)) ||
+						getMessage("avatar.postAvatar.modal.footer.errorMessage"),
+				);
+			})
+			.finally(() => setLoading(false));
+	}, [avatar, name, description, createdLook]);
+
+	return (
+		<SimpleModal
+			show={show}
+			title={getMessage("avatar.postAvatar.modal.title", {
+				sealEmoji: SEAL_EMOJI_COMPONENT,
+			})}
+			size="sm"
+			buttons={[
+				{
+					type: "neutral",
+					text: getMessage("avatar.postAvatar.modal.buttons.neutral"),
+					onClick: () => setShow(false),
+				},
+				{
+					type: "action",
+					text: getMessage(
+						`avatar.postAvatar.modal.buttons.action.${createdLook ? "posted" : "post"}`,
+					),
+					loading,
+					disabled: !name,
+					onClick: onClickAction,
+				},
+			]}
+			footer={errorMessage && <span className="text-error">{errorMessage}</span>}
+		>
+			<div className="post-avatar-modal">
+				{!createdLook && (
+					<div className="post-avatar-data">
+						<div className="avatar-name">
+							<span>{getMessage("avatar.postAvatar.modal.body.post.name")}</span>
+							<TextInput onType={setName} value={name} />
+						</div>
+						<div className="avatar-description">
+							<span>
+								{getMessage("avatar.postAvatar.modal.body.post.description")}
+							</span>
+							<TextInput as="textarea" onType={setDescription} value={description} />
+						</div>
+					</div>
+				)}
+				{createdLook && (
+					<p className="align-center">
+						{getMessage("avatar.postAvatar.modal.body.posted")}
+					</p>
+				)}
+			</div>
+		</SimpleModal>
+	);
+}

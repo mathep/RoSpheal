@@ -1,0 +1,145 @@
+import { getMessage } from "src/ts/helpers/i18n/getMessage";
+import { getAssetById } from "src/ts/helpers/requests/services/assets";
+import { getPlaceUniverseId } from "src/ts/helpers/requests/services/places";
+import {
+	multigetUniversesByIds,
+	multigetUniversesPlayabilityStatuses,
+} from "src/ts/helpers/requests/services/universes";
+import { getAssetTypeData, placeAssetTypeId } from "src/ts/utils/itemTypes";
+import {
+	getAvatarAssetLink,
+	getCreatorStoreAssetLink,
+	getExperienceLink,
+	getHomePageUrl,
+	getRobloxSupportUrl,
+} from "src/ts/utils/links";
+import Button from "../core/Button";
+import Page404 from "../core/errors/404";
+import Loading from "../core/Loading";
+import usePromise from "../hooks/usePromise";
+
+export type ExperienceRestrictedScreenProps = {
+	placeId: number;
+};
+
+export default function ExperienceRestrictedScreen({ placeId }: ExperienceRestrictedScreenProps) {
+	const [isPlace] = usePromise(
+		() =>
+			getAssetById({
+				assetId: placeId,
+			})
+				.then((data) => {
+					if (getAssetTypeData(data.assetTypeId)?.isAvatarAsset) {
+						location.href = getAvatarAssetLink(placeId, data.name);
+						return;
+					}
+
+					if (data.assetTypeId !== placeAssetTypeId) {
+						location.href = getCreatorStoreAssetLink(data.assetId, data.name);
+						return false;
+					}
+
+					return true;
+				})
+				.catch(() => {
+					return false;
+				}),
+
+		[placeId],
+	);
+	const [universeId, universeIdFetched] = usePromise(
+		() =>
+			getPlaceUniverseId({
+				placeId,
+			}),
+		[placeId],
+	);
+	const [playabilityReason, playabilityReasonFetched] = usePromise(() => {
+		if (!universeId) {
+			return;
+		}
+
+		return multigetUniversesPlayabilityStatuses({
+			universeIds: [universeId],
+		}).then((data) => {
+			const item = data?.[0];
+			const reason = item.playabilityStatus;
+			if (reason === "ContextualPlayabilityRegionalCompliance") {
+				return "Blocked";
+			}
+
+			if (reason === "ContextualPlayabilityRegionalAvailability") {
+				return "Unavailable";
+			}
+
+			if (reason === "UnderReview") {
+				return "UnderReview";
+			}
+
+			if (item?.isPlayable === false) {
+				return "UnavailableOther";
+			}
+
+			return multigetUniversesByIds({
+				universeIds: [universeId],
+			})
+				.then((data) => {
+					if (!data[0]) {
+						return "Unavailable";
+					}
+
+					return "Available";
+				})
+				.catch(() => "UnavailableOther" as const);
+		});
+	}, [universeId]);
+
+	if (isPlace === false) {
+		return <Page404 />;
+	}
+	if (!isPlace || !playabilityReasonFetched || !universeIdFetched) {
+		return <Loading />;
+	}
+
+	if (playabilityReason === "Available") {
+		location.pathname = getExperienceLink(placeId);
+		return null;
+	}
+
+	const suffix = playabilityReason ?? "Orphan";
+
+	return (
+		<div className="item-blocked-screen experience-restricted-screen">
+			<div className="item-blocked">
+				<h2 className="block-title">
+					{getMessage(`experienceRestricted.title.${suffix}`)}
+				</h2>
+				<span className="text block-view-text">
+					{getMessage(`experienceRestricted.message.${suffix}`)}
+				</span>
+				<div className="action-btns">
+					<Button
+						as="a"
+						className="back-btn"
+						type="primary"
+						onClick={() => history.back()}
+					>
+						{getMessage("experienceRestricted.actions.back")}
+					</Button>
+					<Button as="a" className="home-btn" type="control" href={getHomePageUrl()}>
+						{getMessage("experienceRestricted.actions.home")}
+					</Button>
+				</div>
+				<span className="text-footer">
+					{getMessage("experienceRestricted.footer", {
+						supportLink: (contents: string) => (
+							<a href={getRobloxSupportUrl()} className="text-link">
+								{contents}
+							</a>
+						),
+					})}
+				</span>
+			</div>
+		</div>
+	);
+}

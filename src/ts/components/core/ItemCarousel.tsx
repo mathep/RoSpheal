@@ -1,0 +1,103 @@
+import MdOutlineChevronLeft from "@material-symbols/svg-600/outlined/chevron_left-fill.svg";
+import MdOutlineChevronRight from "@material-symbols/svg-600/outlined/chevron_right-fill.svg";
+import classNames from "classnames";
+import type { ComponentChildren, WheelEventHandler } from "preact";
+import { useCallback, useRef, useState } from "preact/hooks";
+import { clamp } from "src/ts/utils/misc";
+
+export type ItemCarouselProps = {
+	children: ComponentChildren;
+	className?: string;
+	innerClassName?: string;
+	onlyXScroll?: boolean;
+};
+
+export default function ItemCarousel({
+	children,
+	className,
+	innerClassName,
+	onlyXScroll,
+}: ItemCarouselProps) {
+	const [scrollWidth, setScrollWidth] = useState(0);
+
+	const [currentScrollLeft, setCurrentScrollLeft] = useState(0);
+	const [maxScrollLeft, setMaxScrollLeft] = useState(0);
+
+	const ref = useRef<HTMLDivElement>(null);
+
+	const onWheel: WheelEventHandler<HTMLDivElement> = useCallback(
+		(e) => {
+			if (onlyXScroll && Math.abs(e.deltaY) > Math.abs(e.deltaX)) return;
+
+			const scrollLeft = clamp(e.deltaX + e.deltaY + currentScrollLeft, 0, maxScrollLeft);
+
+			e.preventDefault();
+			if (scrollLeft === currentScrollLeft) {
+				return;
+			}
+
+			e.currentTarget.scrollTo({
+				left: scrollLeft,
+			});
+
+			setCurrentScrollLeft(scrollLeft);
+		},
+		[currentScrollLeft, maxScrollLeft],
+	);
+
+	const onChevronClick = useCallback(
+		(previous: boolean) => {
+			const scrollLeft = clamp(
+				currentScrollLeft + (previous ? -scrollWidth : scrollWidth),
+				0,
+				maxScrollLeft,
+			);
+
+			ref.current?.scrollTo({
+				left: scrollLeft,
+				behavior: "smooth",
+			});
+
+			setCurrentScrollLeft(scrollLeft);
+		},
+		[maxScrollLeft, currentScrollLeft],
+	);
+
+	return (
+		<div className={classNames("roseal-item-carousel", className)}>
+			{currentScrollLeft > 0 && (
+				<button
+					type="button"
+					className="roseal-btn roseal-scroller previous"
+					onClick={() => onChevronClick(true)}
+				>
+					<MdOutlineChevronLeft className="roseal-icon" />
+				</button>
+			)}
+			{maxScrollLeft > currentScrollLeft && (
+				<button
+					type="button"
+					className="roseal-btn roseal-scroller next"
+					onClick={() => onChevronClick(false)}
+				>
+					<MdOutlineChevronRight className="roseal-icon" />
+				</button>
+			)}
+			<div
+				className={innerClassName}
+				ref={(el) => {
+					ref.current = el;
+					if (el) {
+						const clientWidth = el.clientWidth;
+
+						setScrollWidth(clientWidth);
+						setMaxScrollLeft(el.scrollWidth - clientWidth);
+					}
+				}}
+				onWheelCapture={onWheel}
+			>
+				{children}
+			</div>
+		</div>
+	);
+}

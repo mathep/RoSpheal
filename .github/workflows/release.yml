@@ -1,0 +1,42 @@
+name: Release
+
+on:
+  release:
+    types: [created]
+
+jobs:
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Setup Repo
+        uses: actions/checkout@v5
+        with:
+          submodules: recursive
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+            bun-version: latest
+
+      - name: Install Dependencies
+        run: bun i --frozen-lockfile
+
+      #
+      #- name: Biome Lint
+      #  run: bun lint
+        
+      - name: Build Files
+        env:
+          WEB_EXT_API_KEY: ${{ secrets.AMO_API_KEY }}
+          WEB_EXT_API_SECRET: ${{ secrets.AMO_API_KEY_SECRET }}
+        run: bun get-src; UPLOAD_TO_AMO=true bun redist; bun get-i18n
+
+      - name: Upload files to git release
+        uses: svenstaro/upload-release-action@v2
+        with:
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          file: builds-dist/**.{zip,json}
+          file_glob: true
+          tag: ${{ github.ref }}

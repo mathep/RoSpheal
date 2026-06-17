@@ -1,0 +1,157 @@
+import MdOutlineArrowDownward from "@material-symbols/svg-400/outlined/arrow_downward-fill.svg";
+import MdOutlineArrowUpward from "@material-symbols/svg-400/outlined/arrow_upward-fill.svg";
+import classNames from "classnames";
+import { useState } from "preact/hooks";
+import { getMessage } from "src/ts/helpers/i18n/getMessage";
+import {
+	type ListedAssetOwnerInstance,
+	type ListedCollectibleOwnerInstance,
+	listAssetOwners,
+	listCollectibleOwners,
+} from "src/ts/helpers/requests/services/assets";
+import type { SortOrder } from "src/ts/helpers/requests/services/badges";
+import type { MarketplaceItemType } from "src/ts/helpers/requests/services/marketplace";
+import { getAvatarItem } from "src/ts/helpers/requests/services/marketplace";
+import Icon from "../core/Icon";
+import Loading from "../core/Loading";
+import Pagination from "../core/Pagination";
+import Tooltip from "../core/Tooltip";
+import usePages from "../hooks/usePages";
+import AvatarItemOwnerItem from "./OwnerItem";
+
+export type AvatarItemOwnersListProps = {
+	itemId: number;
+	itemType: MarketplaceItemType;
+	totalSerialNumbers: number;
+	isLimited: boolean;
+	isUGC: boolean;
+	showCollapse?: boolean;
+};
+
+export default function AvatarItemOwnersList({
+	itemId,
+	itemType,
+	totalSerialNumbers,
+	isUGC,
+	isLimited,
+	showCollapse,
+}: AvatarItemOwnersListProps) {
+	const [collapsed, setCollapsed] = useState(true);
+	const [sortOrder, setSortOrder] = useState<SortOrder>("Asc");
+
+	const { items, loading, pageNumber, maxPageNumber, hasAnyItems, error, setPageNumber } =
+		usePages<ListedAssetOwnerInstance | ListedCollectibleOwnerInstance, string>({
+			getNextPage: (state) =>
+				(itemType === "Asset"
+					? listAssetOwners({
+							assetId: itemId,
+							cursor: state.nextCursor,
+							limit: 100,
+							sortOrder,
+						})
+					: getAvatarItem({ itemId, itemType }).then((data) =>
+							listCollectibleOwners({
+								collectibleItemId: data?.collectibleItemId ?? "",
+								cursor: state.nextCursor,
+								limit: 100,
+								sortOrder,
+							}),
+						)
+				).then((data) => ({
+					...state,
+					items: data.data,
+					nextCursor: data.nextPageCursor ?? undefined,
+					hasNextPage: !!data.nextPageCursor,
+				})),
+			paging: {
+				method: "pagination",
+				itemsPerPage: 10,
+			},
+			dependencies: {
+				reset: [itemId, itemType, sortOrder],
+			},
+		});
+
+	return (
+		<div id="asset-owners">
+			{showCollapse && (
+				<div
+					className={classNames("container-header", {
+						"cursor-pointer": showCollapse,
+					})}
+					onClick={() => setCollapsed(!collapsed)}
+				>
+					<h2>{getMessage("avatarItem.owners.title")}</h2>
+					<Icon name={collapsed ? "down" : "up"} size="16x16" />
+				</div>
+			)}
+			{(!collapsed || !showCollapse) && (
+				<div className="asset-owners-container section-content remove-panel resellers-container">
+					{loading ? (
+						<Loading />
+					) : (
+						<>
+							<Tooltip
+								includeContainerClassName={false}
+								button={
+									<button
+										type="button"
+										className={classNames(
+											"btn-generic-more-sm sort-order-btn",
+											{
+												disabled: loading,
+											},
+										)}
+										onClick={() => {
+											setSortOrder(sortOrder === "Desc" ? "Asc" : "Desc");
+										}}
+									>
+										{sortOrder === "Desc" ? (
+											<MdOutlineArrowDownward className="roseal-icon" />
+										) : (
+											<MdOutlineArrowUpward className="roseal-icon" />
+										)}
+									</button>
+								}
+							>
+								{getMessage(
+									`avatarItem.owners.filters.sortOrder.${sortOrder.toLowerCase() as "asc" | "desc"}`,
+								)}
+							</Tooltip>
+							{!hasAnyItems && !error && (
+								<p className="section-content-off">
+									{getMessage("avatarItem.owners.noItems")}
+								</p>
+							)}
+							{error && (
+								<p className="section-content-off">
+									{getMessage("avatarItem.owners.error")}
+								</p>
+							)}
+							<ul className="vlist">
+								{items.map((item) => (
+									<AvatarItemOwnerItem
+										key={item.collectibleItemInstanceId}
+										itemType={itemType}
+										{...item}
+										totalSerialNumbers={totalSerialNumbers}
+										isLimited={isLimited}
+										isUGC={isUGC}
+									/>
+								))}
+							</ul>
+							{(maxPageNumber > 1 || pageNumber > 1) && (
+								<Pagination
+									current={pageNumber}
+									hasNext={maxPageNumber > pageNumber}
+									onChange={setPageNumber}
+									disabled={loading}
+								/>
+							)}
+						</>
+					)}
+				</div>
+			)}
+		</div>
+	);
+}
